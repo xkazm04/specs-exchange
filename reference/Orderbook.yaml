@@ -1,0 +1,3307 @@
+openapi: 3.0.1
+info:
+  contact: {}
+  title: Order book
+  version: 3.9.2
+  x-logo:
+    url: 'https://tatum.io/images/logo.svg'
+    altText: Tatum
+  description: |-
+    <p>Endpoints to handle Order book operations like creating BID / ASK trades between Tatum Private Ledger accounts, obtaining trade histories, creating futures etc. It is possible to build an exchange based on the Ledger Accounts.</p>
+servers:
+  - url: 'https://api-eu1.tatum.io'
+  - url: 'https://api-us-west1.tatum.io'
+tags:
+  - description: ''
+    name: List trades
+  - description: ''
+    name: Perform trade
+paths:
+  /v3/trade:
+    post:
+      description: |
+        <h4>2 credits for API call, 2 credits for each fill of the counter trade. 1 API call + 2 fills  = 6 credits.</h4><br/>
+        <p>Store new buy / sell trade. If there is trade already available to fill, fill as much trades as possible.<br/>
+        It is possible to charge fees for the trades. Fees are an extra amount on top of the trade amount and are paid in the currency of the 1st pair to the separate fee account,
+        e.g. for BTC/ETH pair fees will be paid in BTC.</p>
+
+        <p>
+        If you fill type of the trade with FUTURE_BUY or FUTURE_SELL the trade will behave as a trade future. The trade is concluded now but will be fulfilled in future.
+        The date of fulfillment is by the “Seal Date” field. You can also block a percentage of the amount until the future trade has expired.
+        </p>
+        <p>Futures can also penalize contracting parties if they don’t have the agreed balance available in their accounts.
+        The penalty is calculated in the following way: Penalty amount = (Percentage of incomplete deal amount because of shortage from user) × (Maximum Penalty percentage of futures deal based on blocked amount and time interval) × (total blocked value).
+        </p>
+        <p>Example of the BTC/USDT trade future:</p>
+        <p>The maker creates a sell with the following properties: 1 BTC at a price of 60000 USDT, with a blocking percentage of 22%, a penalty percentage of 45%, a system commision of 1% and with an expiration time of within 12 hours.</p>
+        <pre>
+        {
+          "type": "FUTURE_SELL",
+          "price": "60000",
+          "amount": "1",
+          "pair": "BTC/USDT",
+          "currency1AccountId": "60a236db1b57f60d62612bf3",
+          "currency2AccountId": "609d0696bf835c241ac2920f",
+          "fee": 1,
+          "feeAccountId": "609d0696bf835c251ac2920a",
+          "attr": {
+            "sealDate": 1621990960631,
+            "percentBlock": 22,
+            "percentPenalty": 45
+          }
+        }
+        </pre>
+
+        The taker accepts the offer with a buy and blocks 13200 USDT (60000 USDT × 0.22) in their account.
+        <pre>
+        {
+          "type": "FUTURE_BUY",
+          "price": "60000",
+          "amount": "1",
+          "pair": "BTC/USDT",
+          "currency1AccountId": "60a236db1b57f60d62612bf2",
+          "currency2AccountId": "609d0696bf835c241ac2920a",
+          "attr": {
+            "sealDate": 1621990960631,
+            "percentBlock": 22,
+            "percentPenalty": 45
+          }
+        }
+        </pre>
+        <p>At the time of the trade, the maker and taker have the following conditions.
+        The maker has 0.65 BTC (35% deficit) in their account and the taker has 49200 USDT (18% deficit) in their account.
+        </p>
+
+        <p>
+        The maker penalty is equal to 0.35 × 0.22 × (0.45 × 1 BTC) = 0.03465 BTC.
+        The taker penalty is equal to 0.18 × 0.22 × (0.45 × 60000 USDT) = 1069.2 USDT.
+        </p>
+        <p>
+        The system commission for the maker is 1 BTC × 1% = 0.01 BTC.
+        The system commission for the taker is 60000 USDT × 1% = 600 USDT.
+        </p>
+        <p>
+        The maker’s assets after deducting penalties and commissions equals 0.65 - 0.03465 - 0.01 = 0.60535 BTC. The taker’s assets after deducting penalties and commissions equals 49200 - 1069.2 - 600 = 47530.8 USDT.
+        </p>
+        <p>
+        The amount received by the maker after the trade is (0.60535 × 60000) + 1069.2 = 37390.2 USDT and the taker receives 0.60535 + 0.03465 = 0.64 BTC.
+        </p>
+      operationId: storeTrade
+      summary: Store buy / sell trade
+      tags:
+        - Perform trade
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - price
+                - amount
+                - pair
+                - currency1AccountId
+                - currency2AccountId
+                - attr
+              properties:
+                type:
+                  type: string
+                  description: 'Type of the trade, BUY, SELL, FUTURE_BUY, FUTURE_SELL'
+                  example: BUY
+                  enum:
+                    - BUY
+                    - SELL
+                    - FUTURE_BUY
+                    - FUTURE_SELL
+                price:
+                  type: string
+                  description: Price to buy / sell
+                  example: '8650.4'
+                  maxLength: 38
+                  pattern: '^[+]?((\d+(\.\d*)?)|(\.\d+))$'
+                amount:
+                  type: string
+                  description: Amount of the trade to be bought / sold
+                  example: '15000'
+                  maxLength: 38
+                  pattern: '^[+]?((\d+(\.\d*)?)|(\.\d+))$'
+                pair:
+                  type: string
+                  description: Trading pair
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                currency1AccountId:
+                  type: string
+                  description: ID of the account of the currency 1 trade currency
+                  example: 7c21ed165e294db78b95f0f1
+                  minLength: 24
+                  maxLength: 24
+                currency2AccountId:
+                  type: string
+                  description: ID of the account of the currency 2 trade currency
+                  example: 7c21ed165e294db78b95f0f1
+                  minLength: 24
+                  maxLength: 24
+                feeAccountId:
+                  type: string
+                  description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                  example: 7c21ed165e294db78b95f0f1
+                  minLength: 24
+                  maxLength: 24
+                fee:
+                  type: number
+                  description: Percentage of the trade amount to be paid as a fee.
+                  example: 1.5
+                  minimum: 0
+                  maximum: 100
+                attr:
+                  type: object
+                  description: Additional attributes for the future type.
+                  required:
+                    - sealDate
+                  properties:
+                    sealDate:
+                      type: number
+                      description: Time in UTC when the future will be filled.
+                      example: 1572031674384
+                      minimum: 0
+                    percentBlock:
+                      description: Percentage of the future amount which selling or buying account must have available on future creation. This amount will be blocked till future is filled or expires.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    percentPenalty:
+                      description: 'If one of the parties dont have filled full amount of the future at the time of expiration, the party will be penalized. Penalty is sent to opposite party in exchanged crypto.'
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: ID of the entity.
+                    example: 5e68c66581f2ee32bc354087
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '403':
+          description: 'Forbidden. The request is authenticated, but it is not possible to required perform operation due to logical error or invalid permissions.'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        description: account.not.exists
+                        example: account.not.exists
+                        type: string
+                      message:
+                        description: No such account.
+                        example: No such account.
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: account.currency.missing
+                        example: account.currency.missing
+                        type: string
+                      message:
+                        description: 'No such virtual currency ${currency} for account ${account}.'
+                        example: 'No such virtual currency ${currency} for account ${account}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: rate.not.found
+                        example: rate.not.found
+                        type: string
+                      message:
+                        description: No such currency rate.
+                        example: No such currency rate.
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: vc.not.found
+                        example: vc.not.found
+                        type: string
+                      message:
+                        description: No such virtual currency.
+                        example: No such virtual currency.
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: amount.format
+                        example: amount.format
+                        type: string
+                      message:
+                        description: Amount has incorrect format.
+                        example: Amount has incorrect format.
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency1AccountId.not.exists
+                        example: trade.currency1AccountId.not.exists
+                        type: string
+                      message:
+                        description: 'Unable to find currency1 account ${trade.currency1AccountId}.'
+                        example: 'Unable to find currency1 account ${trade.currency1AccountId}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency1AccountId.frozen
+                        example: trade.currency1AccountId.frozen
+                        type: string
+                      message:
+                        description: 'Currency1 account ${trade.currency1AccountId} is frozen, unable to perform trade.'
+                        example: 'Currency1 account ${trade.currency1AccountId} is frozen, unable to perform trade.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.feeAccount
+                        example: trade.feeAccount
+                        type: string
+                      message:
+                        description: 'Unable to find fee account ${trade.feeAccountId}.'
+                        example: 'Unable to find fee account ${trade.feeAccountId}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency.fee
+                        example: trade.currency.fee
+                        type: string
+                      message:
+                        description: Incompatible currencies for currency1 and fee account.
+                        example: Incompatible currencies for currency1 and fee account.
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency1AccountId.customer.disabled
+                        example: trade.currency1AccountId.customer.disabled
+                        type: string
+                      message:
+                        description: 'Currency1 account''s customer ${currency1Account.customerId} is disabled, unable to perform exchange trade.'
+                        example: 'Currency1 account''s customer ${currency1Account.customerId} is disabled, unable to perform exchange trade.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency2AccountId.not.exists
+                        example: trade.currency2AccountId.not.exists
+                        type: string
+                      message:
+                        description: 'Unable to find currency2 account ${trade.currency2AccountId}.'
+                        example: 'Unable to find currency2 account ${trade.currency2AccountId}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency2AccountId.frozen
+                        example: trade.currency2AccountId.frozen
+                        type: string
+                      message:
+                        description: 'Currency2 account ${trade.currency2AccountId} is frozen, unable to perform trade.'
+                        example: 'Currency2 account ${trade.currency2AccountId} is frozen, unable to perform trade.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency2AccountId.customer.disabled
+                        example: trade.currency2AccountId.customer.disabled
+                        type: string
+                      message:
+                        description: 'Currency2 account''s customer ${currency2Account.customerId} is disabled, unable to perform exchange trade.'
+                        example: 'Currency2 account''s customer ${currency2Account.customerId} is disabled, unable to perform exchange trade.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency1.pair
+                        example: trade.currency1.pair
+                        type: string
+                      message:
+                        description: 'Incompatible currencies for currency1 account ${trade.currency1AccountId} and trading pair.'
+                        example: 'Incompatible currencies for currency1 account ${trade.currency1AccountId} and trading pair.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency2.pair
+                        example: trade.currency2.pair
+                        type: string
+                      message:
+                        description: 'Incompatible currencies for currency2 account ${trade.currency2AccountId} and trading pair.'
+                        example: 'Incompatible currencies for currency2 account ${trade.currency2AccountId} and trading pair.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency1.balance
+                        example: trade.currency1.balance
+                        type: string
+                      message:
+                        description: 'Insufficient balance on currency1 account ${trade.currency1AccountId}.'
+                        example: 'Insufficient balance on currency1 account ${trade.currency1AccountId}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        description: trade.currency2.balance
+                        example: trade.currency2.balance
+                        type: string
+                      message:
+                        description: 'Insufficient balance on currency2 account ${trade.currency2AccountId}.'
+                        example: 'Insufficient balance on currency2 account ${trade.currency2AccountId}.'
+                        type: string
+                      statusCode:
+                        description: '403'
+                        example: 403
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  /v3/trade/chart:
+    post:
+      description: |
+        <h4>2 credits for API call.</h4><br/>
+        <p>Obtain data from the closed trades for entering in the chart. Time interval is set between <i>from</i> and <i>to</i> and there is defined time frame. There can be obtained at most 200 time points in the time interval.</p>
+      operationId: chartRequest
+      summary: Obtain chart data from historical closed trades
+      tags:
+        - List trades
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pair
+                - from
+                - to
+                - timeFrame
+              properties:
+                pair:
+                  type: string
+                  description: Trading pair
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                from:
+                  type: number
+                  minimum: 0
+                  example: 1613654998398
+                  description: Start interval in UTC millis.
+                to:
+                  type: number
+                  minimum: 0
+                  example: 1613654998398
+                  description: End interval in UTC millis.
+                timeFrame:
+                  type: string
+                  example: MIN_5
+                  description: Time frame of the chart.
+                  enum:
+                    - MIN_1
+                    - MIN_3
+                    - MIN_5
+                    - MIN_15
+                    - MIN_30
+                    - HOUR_1
+                    - HOUR_4
+                    - HOUR_12
+                    - DAY
+                    - WEEK
+                    - MONTH
+                    - YEAR
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: 1 point in the chart. This point represents the tick in the grapch based on the specified time frame.
+                  required:
+                    - timestamp
+                    - high
+                    - low
+                    - open
+                    - close
+                    - volume
+                  properties:
+                    timestamp:
+                      type: number
+                      description: Milliseconds in UTC of the time interval.
+                      example: 1613654117167
+                    high:
+                      type: string
+                      description: Highest trade value in the current interval.
+                      example: '54213.21'
+                    low:
+                      type: string
+                      description: Lowest trade value in the current interval.
+                      example: '53213.54'
+                    open:
+                      type: string
+                      description: Open trade value in the current interval.
+                      example: '53513'
+                    close:
+                      type: string
+                      description: Close trade value in the current interval.
+                      example: '54113'
+                    volume:
+                      type: string
+                      description: Total volume of assets traded in the current interval. Volume is in currency1 asset.
+                      example: '2.423'
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  /v3/trade/history:
+    get:
+      deprecated: true
+      description: '<h4>1 credit per API call.</h4><br/><p>List all historical trades. It is possible to list all trades, trades for specific trading pair and/or account.</p>'
+      operationId: getHistoricalTrades
+      summary: List all historical trades
+      tags:
+        - List trades
+      parameters:
+        - description: 'Account ID. If present, only closed trades for given account will be present.'
+          in: query
+          name: id
+          required: false
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+        - description: 'Trade pair. If present, only closed trades on given trade pair will be present.'
+          in: query
+          name: pair
+          required: false
+          schema:
+            type: string
+            example: BTC/ETH
+            minLength: 3
+            maxLength: 30
+            pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+        - description: Max number of items per page is 50.
+          in: query
+          name: pageSize
+          schema:
+            type: number
+            example: 10
+            maximum: 50
+            minimum: 1
+          required: true
+        - description: Offset to obtain next page of the data.
+          in: query
+          name: offset
+          schema:
+            type: number
+            example: 0
+        - description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+          in: query
+          name: count
+          example: true
+          schema:
+            type: boolean
+        - description: Trade types.
+          in: query
+          name: types
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              example: BUY
+              enum:
+                - FUTURE_BUY
+                - FUTURE_SELL
+                - BUY
+                - SELL
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+    post:
+      description: '<h4>1 credit per API call.</h4><br/><p>List all historical trades. It is possible to list all trades, trades for specific trading pair and/or account.</p>'
+      operationId: getHistoricalTradesBody
+      summary: List all historical trades
+      tags:
+        - List trades
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pageSize
+              properties:
+                id:
+                  description: 'Account ID. If present, only closed trades for given account will be present.'
+                  type: string
+                  example: 5e68c66581f2ee32bc354087
+                customerId:
+                  description: 'Customer ID. If present, only closed trades for given customer will be present.'
+                  type: string
+                  example: 5e68c66581f2ee32bc354087
+                pageSize:
+                  description: Max number of items per page is 50.
+                  type: number
+                  example: 10
+                  maximum: 50
+                  minimum: 1
+                offset:
+                  description: Offset to obtain next page of the data.
+                  type: number
+                  example: 0
+                pair:
+                  description: 'Trade pair. If present, list historical trades for that pair.'
+                  type: string
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                count:
+                  description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+                  example: true
+                  type: boolean
+                types:
+                  description: Trade types.
+                  type: array
+                  items:
+                    type: string
+                    example: BUY
+                    enum:
+                      - FUTURE_BUY
+                      - FUTURE_SELL
+                      - BUY
+                      - SELL
+                amount:
+                  type: array
+                  description: Amount of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                fill:
+                  type: array
+                  description: Fill of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                price:
+                  type: array
+                  description: Price of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                created:
+                  type: array
+                  description: Created date of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                sort:
+                  description: Sorts the result by selected property. The priority of the items is determined by order of the sort properties in array.
+                  items:
+                    type: string
+                    enum:
+                      - PRICE_ASC
+                      - PRICE_DESC
+                      - CREATED_ASC
+                      - CREATED_DESC
+                      - AMOUNT_ASC
+                      - AMOUNT_DESC
+                      - FILL_ASC
+                      - FILL_DESC
+                      - FEE_ASC
+                      - FEE_DESC
+                    example: PRICE_ASC
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  /v3/trade/buy:
+    get:
+      description: <h4>1 credit per API call.</h4><br/><p>List all active buy trades.</p>
+      operationId: getBuyTrades
+      deprecated: true
+      summary: List all active buy trades
+      tags:
+        - List trades
+      parameters:
+        - description: 'Account ID. If present, list current active buy trades for that account.'
+          in: query
+          name: id
+          required: false
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+        - description: 'Customer ID. If present, list current active buy trades for that customer.'
+          in: query
+          name: customerId
+          required: false
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+        - description: Max number of items per page is 50.
+          in: query
+          name: pageSize
+          schema:
+            type: number
+            example: 10
+            maximum: 50
+            minimum: 1
+          required: true
+        - description: Offset to obtain next page of the data.
+          in: query
+          name: offset
+          schema:
+            type: number
+            example: 0
+        - description: 'Trade pair. If present, list current active buy trades for that pair.'
+          in: query
+          name: pair
+          schema:
+            type: string
+            example: BTC/EUR
+            minLength: 3
+            maxLength: 30
+            pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+        - description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+          in: query
+          name: count
+          example: true
+          schema:
+            type: boolean
+        - description: Trade type.
+          in: query
+          name: tradeType
+          example: BUY
+          required: false
+          schema:
+            type: string
+            enum:
+              - FUTURE_BUY
+              - BUY
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+    post:
+      description: <h4>1 credit per API call.</h4><br/><p>List all active buy trades.</p>
+      operationId: getBuyTradesBody
+      summary: List all active buy trades
+      tags:
+        - List trades
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pageSize
+              properties:
+                id:
+                  type: string
+                  description: 'Account ID. If present, list current active sell trades for that account.'
+                  example: 5e68c66581f2ee32bc354087
+                customerId:
+                  description: 'Customer ID. If present, list current active buy trades for that customer.'
+                  type: string
+                  example: 5e68c66581f2ee32bc354087
+                pageSize:
+                  description: Max number of items per page is 50.
+                  type: number
+                  example: 10
+                  maximum: 50
+                  minimum: 1
+                offset:
+                  description: Offset to obtain next page of the data.
+                  type: number
+                  example: 0
+                pair:
+                  description: 'Trade pair. If present, list current active sell trades for that pair.'
+                  type: string
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                count:
+                  description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+                  example: true
+                  type: boolean
+                tradeType:
+                  description: Trade type.
+                  example: BUY
+                  type: string
+                  enum:
+                    - FUTURE_BUY
+                    - BUY
+                amount:
+                  type: array
+                  description: Amount of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                fill:
+                  type: array
+                  description: Fill of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                price:
+                  type: array
+                  description: Price of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                created:
+                  type: array
+                  description: Created date of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                sort:
+                  description: Sorts the result by selected property. The priority of the items is determined by order of the sort properties in array.
+                  items:
+                    type: string
+                    enum:
+                      - PRICE_ASC
+                      - PRICE_DESC
+                      - CREATED_ASC
+                      - CREATED_DESC
+                      - AMOUNT_ASC
+                      - AMOUNT_DESC
+                      - FILL_ASC
+                      - FILL_DESC
+                      - FEE_ASC
+                      - FEE_DESC
+                    example: PRICE_ASC
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  /v3/trade/sell:
+    get:
+      description: <h4>1 credit per API call.</h4><br/><p>List all active sell trades.</p>
+      operationId: getSellTrades
+      deprecated: true
+      summary: List all active sell trades
+      tags:
+        - List trades
+      parameters:
+        - description: 'Account ID. If present, list current active sell trades for that account.'
+          in: query
+          name: id
+          required: false
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+        - description: 'Customer ID. If present, list current active buy trades for that customer.'
+          in: query
+          name: customerId
+          required: false
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+        - description: Max number of items per page is 50.
+          in: query
+          name: pageSize
+          schema:
+            type: number
+            example: 10
+            maximum: 50
+            minimum: 1
+          required: true
+        - description: Offset to obtain next page of the data.
+          in: query
+          name: offset
+          schema:
+            type: number
+            example: 0
+        - description: 'Trade pair. If present, list current active sell trades for that pair.'
+          in: query
+          name: pair
+          schema:
+            type: string
+            example: BTC/EUR
+            minLength: 3
+            maxLength: 30
+            pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+        - description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+          in: query
+          name: count
+          example: true
+          schema:
+            type: boolean
+        - description: Trade type.
+          in: query
+          name: tradeType
+          example: SELL
+          required: false
+          schema:
+            type: string
+            enum:
+              - FUTURE_SELL
+              - SELL
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+    post:
+      description: <h4>1 credit per API call.</h4><br/><p>List all active sell trades.</p>
+      operationId: getSellTradesBody
+      summary: List all active sell trades
+      tags:
+        - List trades
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pageSize
+              properties:
+                id:
+                  type: string
+                  description: 'Account ID. If present, list current active sell trades for that account.'
+                  example: 5e68c66581f2ee32bc354087
+                customerId:
+                  description: 'Customer ID. If present, list current active buy trades for that customer.'
+                  type: string
+                  example: 5e68c66581f2ee32bc354087
+                pageSize:
+                  description: Max number of items per page is 50.
+                  type: number
+                  example: 10
+                  maximum: 50
+                  minimum: 1
+                offset:
+                  description: Offset to obtain next page of the data.
+                  type: number
+                  example: 0
+                pair:
+                  description: 'Trade pair. If present, list current active sell trades for that pair.'
+                  type: string
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                count:
+                  description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+                  example: true
+                  type: boolean
+                tradeType:
+                  description: Trade type.
+                  example: SELL
+                  type: string
+                  enum:
+                    - FUTURE_SELL
+                    - SELL
+                amount:
+                  type: array
+                  description: Amount of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                fill:
+                  type: array
+                  description: Fill of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                price:
+                  type: array
+                  description: Price of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                created:
+                  type: array
+                  description: Created date of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                sort:
+                  description: Sorts the result by selected property. The priority of the items is determined by order of the sort properties in array.
+                  items:
+                    type: string
+                    enum:
+                      - PRICE_ASC
+                      - PRICE_DESC
+                      - CREATED_ASC
+                      - CREATED_DESC
+                      - AMOUNT_ASC
+                      - AMOUNT_DESC
+                      - FILL_ASC
+                      - FILL_DESC
+                      - FEE_ASC
+                      - FEE_DESC
+                    example: PRICE_ASC
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  /v3/trade/matched:
+    post:
+      description: <h4>1 credit per API call.</h4><br/><p>List all matched orders from the FUTURE_BUY OR FUTURE_SELL orders.</p>
+      operationId: getMatchedTrades
+      summary: List all matched orders from FUTURE_SELL/FUTURE_BUY trades
+      tags:
+        - List trades
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pageSize
+              properties:
+                id:
+                  type: string
+                  description: 'Account ID. If present, list current active sell trades for that account.'
+                  example: 5e68c66581f2ee32bc354087
+                customerId:
+                  description: 'Customer ID. If present, list current active buy trades for that customer.'
+                  type: string
+                  example: 5e68c66581f2ee32bc354087
+                pageSize:
+                  description: Max number of items per page is 50.
+                  type: number
+                  example: 10
+                  maximum: 50
+                  minimum: 1
+                offset:
+                  description: Offset to obtain next page of the data.
+                  type: number
+                  example: 0
+                pair:
+                  description: 'Trade pair. If present, list current active sell trades for that pair.'
+                  type: string
+                  example: BTC/EUR
+                  minLength: 3
+                  maxLength: 30
+                  pattern: '^[A-a-zZ0-9_\-]+\/[A-Za-z0-9_\-]+$'
+                count:
+                  description: Get the total trade pair count based on the filter. Either count or pageSize is accepted.
+                  example: true
+                  type: boolean
+                tradeType:
+                  description: Trade type.
+                  example: SELL
+                  type: string
+                  enum:
+                    - FUTURE_SELL
+                    - SELL
+                amount:
+                  type: array
+                  description: Amount of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                fill:
+                  type: array
+                  description: Fill of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                price:
+                  type: array
+                  description: Price of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                created:
+                  type: array
+                  description: Created date of the trade. AND is used between filter options.
+                  items:
+                    type: object
+                    properties:
+                      op:
+                        type: string
+                        description: Filtering operation.
+                        example: gte
+                        enum:
+                          - gte
+                          - lte
+                          - gt
+                          - lt
+                          - eq
+                          - neq
+                      value:
+                        type: string
+                        description: Value of the operation.
+                        example: '1.5'
+                    required:
+                      - op
+                      - value
+                sort:
+                  description: Sorts the result by selected property. The priority of the items is determined by order of the sort properties in array.
+                  items:
+                    type: string
+                    enum:
+                      - PRICE_ASC
+                      - PRICE_DESC
+                      - CREATED_ASC
+                      - CREATED_DESC
+                      - AMOUNT_ASC
+                      - AMOUNT_DESC
+                      - FILL_ASC
+                      - FILL_DESC
+                      - FEE_ASC
+                      - FEE_DESC
+                    example: PRICE_ASC
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: ID of the trade
+                      example: 7c21ed165e294db78b95f0f1
+                    type:
+                      type: string
+                      description: 'Type of the trade, BUY or SELL'
+                      example: BUY
+                      enum:
+                        - BUY
+                        - SELL
+                    price:
+                      type: string
+                      description: Price to buy / sell
+                      example: '8650.4'
+                    amount:
+                      type: string
+                      description: Amount of the trade to be bought / sold
+                      example: '15000'
+                    pair:
+                      type: string
+                      description: Trading pair
+                      example: BTC/EUR
+                    isMaker:
+                      type: boolean
+                      description: If closed trade was Maker or Taker trade
+                      example: true
+                    fill:
+                      type: string
+                      description: How much of the trade was already filled.
+                      example: '1500'
+                    feeAccountId:
+                      type: string
+                      description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                      example: 7c21ed165e294db78b95f0f1
+                      minLength: 24
+                      maxLength: 24
+                    fee:
+                      type: number
+                      description: Percentage of the trade amount to be paid as a fee.
+                      example: 1.5
+                      minimum: 0
+                      maximum: 100
+                    currency1AccountId:
+                      type: string
+                      description: ID of the account of the currenc 1 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    currency2AccountId:
+                      type: string
+                      description: ID of the account of the currenc 2 trade currency
+                      example: 7c21ed165e294db78b95f0f1
+                    created:
+                      type: number
+                      description: 'Creation date, UTC millis'
+                      example: 1585170363103
+                    attr:
+                      type: object
+                      description: Additional attributes for the future type.
+                      required:
+                        - sealDate
+                      properties:
+                        sealDate:
+                          type: number
+                          description: Time in UTC when the future will be filled.
+                          example: 1572031674384
+                          minimum: 0
+                        percentBlock:
+                          description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                        percentPenalty:
+                          description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                          type: number
+                          example: 1.5
+                          minimum: 0
+                          maximum: 100
+                type: array
+          description: OK
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  '/v3/trade/{id}':
+    get:
+      description: <h4>1 credit for API call</h4><br/><p>Get existing opened trade.</p>
+      parameters:
+        - description: Trade ID
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+      operationId: getTradeById
+      summary: Get existing trade
+      tags:
+        - List trades
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: ID of the trade
+                    example: 7c21ed165e294db78b95f0f1
+                  type:
+                    type: string
+                    description: 'Type of the trade, BUY or SELL'
+                    example: BUY
+                    enum:
+                      - BUY
+                      - SELL
+                  price:
+                    type: string
+                    description: Price to buy / sell
+                    example: '8650.4'
+                  amount:
+                    type: string
+                    description: Amount of the trade to be bought / sold
+                    example: '15000'
+                  pair:
+                    type: string
+                    description: Trading pair
+                    example: BTC/EUR
+                  isMaker:
+                    type: boolean
+                    description: If closed trade was Maker or Taker trade
+                    example: true
+                  fill:
+                    type: string
+                    description: How much of the trade was already filled.
+                    example: '1500'
+                  feeAccountId:
+                    type: string
+                    description: 'ID of the account where fee will be paid, if any. If trade is a BUY or FUTURE_BUY type, feeAccountId must have same currency as a currency of currency2AccountId, and vice versa if trade is a SELL or FUTURE_SELL type, feeAccountId must have same currency as a currency of currency1AccountId.'
+                    example: 7c21ed165e294db78b95f0f1
+                    minLength: 24
+                    maxLength: 24
+                  fee:
+                    type: number
+                    description: Percentage of the trade amount to be paid as a fee.
+                    example: 1.5
+                    minimum: 0
+                    maximum: 100
+                  currency1AccountId:
+                    type: string
+                    description: ID of the account of the currenc 1 trade currency
+                    example: 7c21ed165e294db78b95f0f1
+                  currency2AccountId:
+                    type: string
+                    description: ID of the account of the currenc 2 trade currency
+                    example: 7c21ed165e294db78b95f0f1
+                  created:
+                    type: number
+                    description: 'Creation date, UTC millis'
+                    example: 1585170363103
+                  attr:
+                    type: object
+                    description: Additional attributes for the future type.
+                    required:
+                      - sealDate
+                    properties:
+                      sealDate:
+                        type: number
+                        description: Time in UTC when the future will be filled.
+                        example: 1572031674384
+                        minimum: 0
+                      percentBlock:
+                        description: Percentage of the future amount which the selling or buying account must have available for the future’s creation. This amount will be blocked until the future is filled or expires.
+                        type: number
+                        example: 1.5
+                        minimum: 0
+                        maximum: 100
+                      percentPenalty:
+                        description: 'If one of the parties doesn’t have the full amount of the future at the time of expiration filled, the party will be penalized.'
+                        type: number
+                        example: 1.5
+                        minimum: 0
+                        maximum: 100
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+    delete:
+      description: <h4>1 credit for API call</h4><br/><p>Cancel existing trade.</p>
+      parameters:
+        - description: Trade ID
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+      operationId: deleteTrade
+      summary: Cancel existing trade
+      tags:
+        - Perform trade
+      responses:
+        '204':
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+  '/v3/trade/account/{id}':
+    delete:
+      description: '<h4>1 credit for API call, 1 credit for each cancelled trade. 1 API call + 2 cancellations  = 3 credits.</h4><br/><p>Cancel all trades for account.</p>'
+      parameters:
+        - description: Account ID
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            example: 5e68c66581f2ee32bc354087
+      operationId: deleteAccountTrades
+      summary: Cancel all existing trades for account
+      tags:
+        - Perform trade
+      responses:
+        '204':
+          description: OK
+        '400':
+          content:
+            application/json:
+              schema:
+                properties:
+                  errorCode:
+                    example: validation.failed
+                    description: validation.failed
+                    type: string
+                  message:
+                    example: Request validation failed. Please see data for additional information.
+                    description: Request validation failed. Please see data for additional information.
+                    type: string
+                  statusCode:
+                    example: 400
+                    description: '400'
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - target
+                      properties:
+                        target:
+                          type: object
+                          additionalProperties: true
+                          description: Request object present in the body of the HTTP request
+                          example:
+                            property: 12345
+                        value:
+                          type: number
+                          description: 'Value of the target object which validation is wrong. Can be of any data type, example here is using type number.'
+                          example: 12345
+                        property:
+                          type: string
+                          description: Property name of the target object which validation is wrong
+                          example: property1
+                        constraints:
+                          type: object
+                          additionalProperties: true
+                          description: 'Object of failed constraints for the target object. Key is the constraint, value is detailed description of the failed constraint.'
+                          example:
+                            min: property1 must not be less than 50000
+                required:
+                  - errorCode
+                  - message
+                  - statusCode
+                  - data
+                type: object
+          description: Bad Request. Validation failed for the given object in the HTTP Body or Request parameters.
+        '401':
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      errorCode:
+                        example: subscription.not.active
+                        description: subscription.not.active
+                        type: string
+                      message:
+                        example: Subscription not active anymore.
+                        description: Subscription not active anymore.
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+                  - properties:
+                      errorCode:
+                        example: subscription.invalid
+                        description: subscription.invalid
+                        type: string
+                      message:
+                        example: 'Unable to find valid subscription for ''${apiKey}'''
+                        description: 'Unable to find valid subscription for ''${apiKey}'''
+                        type: string
+                      statusCode:
+                        example: 401
+                        description: '401'
+                        type: number
+                    required:
+                      - errorCode
+                      - message
+                      - statusCode
+                    type: object
+          description: Unauthorized. Not valid or inactive subscription key present in the HTTP Header.
+        '500':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    example: Internal server error
+                    description: Internal server error
+                    type: string
+                  statusCode:
+                    example: 500
+                    description: '500'
+                    type: number
+                required:
+                  - statusCode
+                  - message
+                type: object
+          description: Internal server error. There was an error on the server while processing the request.
+      security:
+        - X-Api-Key: []
+components:
+  securitySchemes:
+    X-Api-Key:
+      description: |
+        To maintain the highest security level, Tatum requires X-API-Key HTTP header.
+        This X-API-Key represents identification of the plan and can be used by 1 developer or per environment.
+        Each X-API-Key is bound to the test or production blockchains.
+      in: header
+      name: x-api-key
+      type: apiKey

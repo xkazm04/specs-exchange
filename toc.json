@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "type": "item",
+      "title": "Crypto exchange",
+      "uri": "docs/exchange.md"
+    },
+    {
+      "type": "divider",
+      "title": "APIS"
+    },
+    {
+      "type": "item",
+      "title": "Exchange rates",
+      "uri": "reference/Exchange.yaml"
+    },
+    {
+      "type": "item",
+      "title": "Order book",
+      "uri": "reference/Orderbook.yaml"
+    }
+  ]
+}

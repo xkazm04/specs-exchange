@@ -551,6 +551,9 @@ components:
             - LRD
             - LSL
             - LTC
+            - LUNA
+            - LUNA_KRW
+            - LUNA_USD
             - LTL
             - LVL
             - LYD

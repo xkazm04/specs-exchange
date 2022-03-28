@@ -7,7 +7,7 @@ info:
     url: 'https://tatum.io/images/logo.svg'
     altText: Tatum
   description: |-
-    <p>Endpoints to handle Order book operations like creating BID / ASK trades between Tatum Private Ledger accounts, obtaining trade histories, creating futures etc. It is possible to build an exchange based on the Ledger Accounts.</p>
+    <p>Endpoints to handle Order book operations like creating BID / ASK trades between Tatum Private Virtual accounts, obtaining trade histories, creating futures etc. It is possible to build an exchange based on the Ledger Accounts.</p>
 servers:
   - url: 'https://api-eu1.tatum.io'
   - url: 'https://api-us-west1.tatum.io'

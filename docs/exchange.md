@@ -1,7 +1,3 @@
-e---
-tags: [exchange, vc]
----
-
 # How to build a crypto exchange
 
 *Build a crypto exchange backend in half an hour.*
